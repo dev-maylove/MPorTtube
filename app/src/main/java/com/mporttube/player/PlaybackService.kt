@@ -26,9 +26,11 @@ class PlaybackService : MediaSessionService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        session = MediaSession.Builder(this, manager.player)
-            .setSessionActivity(pendingIntent)
-            .build()
+        runCatching {
+            MediaSession.Builder(this, manager.player)
+                .setSessionActivity(pendingIntent)
+                .build()
+        }.onSuccess { session = it }
     }
 
     override fun onGetSession(

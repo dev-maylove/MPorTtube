@@ -93,10 +93,12 @@ class PlayerManager @Inject constructor(
     private fun ensurePlaybackService() {
         if (!prefs.getBoolean("background_playback", true)) return
         val intent = Intent(context, PlaybackService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            context.startForegroundService(intent)
-        } else {
-            context.startService(intent)
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
         }
     }
 
@@ -140,7 +142,9 @@ class PlayerManager @Inject constructor(
     }
 
     fun toggle() {
-        if (player.isPlaying) player.pause() else player.play()
+        runCatching {
+            if (player.isPlaying) player.pause() else player.play()
+        }
         publish()
     }
 
