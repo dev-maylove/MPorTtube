@@ -1,0 +1,717 @@
+package com.mporttube.ui.screen
+
+import android.app.Activity
+import android.content.Context
+import android.content.pm.ActivityInfo
+import android.provider.OpenableColumns
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.media3.ui.PlayerView
+import coil.compose.AsyncImage
+import com.mporttube.data.local.VideoEntity
+import com.mporttube.ui.viewmodel.DownloadViewModel
+import com.mporttube.ui.viewmodel.FavoriteViewModel
+import com.mporttube.ui.viewmodel.HistoryViewModel
+import com.mporttube.ui.viewmodel.HomeViewModel
+import com.mporttube.ui.viewmodel.PlayerViewModel
+import com.mporttube.ui.viewmodel.PlaylistViewModel
+import java.util.UUID
+
+@Composable
+fun HomeScreen(
+    openPlayer: () -> Unit,
+    openHistory: () -> Unit,
+    openFavorites: () -> Unit,
+    openPlaylists: () -> Unit,
+    openDownloads: () -> Unit,
+    vm: HomeViewModel = hiltViewModel(),
+    player: PlayerViewModel = hiltViewModel(),
+    downloads: DownloadViewModel = hiltViewModel()
+) {
+    val videos by vm.items.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+
+    val localPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
+            vm.addLocalVideo(
+                VideoEntity(
+                    id = "local_${UUID.randomUUID()}",
+                    title = displayName(context, uri.toString()),
+                    url = uri.toString(),
+                    source = "LOCAL"
+                )
+            )
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
+                        Text("MPorTtube", fontWeight = FontWeight.Bold)
+                        Text(
+                            "Premium Video Hub",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                },
+                actions = {
+                    TextButton(
+                        onClick = { localPicker.launch(arrayOf("video/*", "audio/*")) }
+                    ) { Text("Add local") }
+                }
+            )
+        },
+        bottomBar = { MiniPlayer(openPlayer) }
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item {
+                ElevatedCard {
+                    Column(Modifier.padding(16.dp)) {
+                        Text(
+                            "Play everything, anywhere",
+                            style = MaterialTheme.typography.headlineSmall
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "Media3 • Room • Queue • Downloads • Local files",
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                }
+            }
+
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AssistChip(onClick = openHistory, label = { Text("History") })
+                    AssistChip(onClick = openFavorites, label = { Text("Favorites") })
+                    AssistChip(onClick = openPlaylists, label = { Text("Playlists") })
+                    AssistChip(onClick = openDownloads, label = { Text("Downloads") })
+                }
+            }
+
+            item {
+                Text(
+                    "Video Library",
+                    style = MaterialTheme.typography.titleLarge
+                )
+            }
+
+            items(videos, key = { it.id }) { video ->
+                VideoRow(
+                    video = video,
+                    onPlay = {
+                        player.queue(videos, videos.indexOf(video))
+                        openPlayer()
+                    },
+                    onDownload = { downloads.enqueue(video) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun VideoRow(
+    video: VideoEntity,
+    onPlay: () -> Unit,
+    onDownload: () -> Unit,
+    favorites: FavoriteViewModel = hiltViewModel(),
+    playlists: PlaylistViewModel = hiltViewModel()
+) {
+    val favoriteFlow = remember(video.id) {
+        favorites.favorite(video.id)
+    }
+    val favorite by favoriteFlow.collectAsStateWithLifecycle()
+
+    ElevatedCard(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (video.thumbnailUrl.isNotBlank()) {
+                AsyncImage(
+                    model = video.thumbnailUrl,
+                    contentDescription = video.title,
+                    modifier = Modifier
+                        .size(108.dp, 68.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                )
+                Spacer(Modifier.width(10.dp))
+            }
+
+            Column(Modifier.weight(1f)) {
+                Text(
+                    video.title,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    video.source,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+                Row {
+                    TextButton(onClick = onPlay) { Text("Play") }
+                    TextButton(
+                        onClick = {
+                            favorites.toggle(video.id, favorite)
+                        }
+                    ) {
+                        Text(if (favorite) "Unfavorite" else "Favorite")
+                    }
+                    if (video.source != "LOCAL") {
+                        TextButton(onClick = onDownload) { Text("Download") }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MiniPlayer(
+    openPlayer: () -> Unit,
+    vm: PlayerViewModel = hiltViewModel()
+) {
+    val state by vm.state.collectAsStateWithLifecycle()
+    val current = state.current ?: return
+
+    Surface(tonalElevation = 8.dp) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = openPlayer)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    current.title,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    if (state.isPlaying) "Now playing" else "Paused",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+
+            TextButton(onClick = vm::previous) { Text("Prev") }
+            TextButton(onClick = vm::toggle) {
+                Text(if (state.isPlaying) "Pause" else "Play")
+            }
+            TextButton(onClick = vm::next) { Text("Next") }
+        }
+    }
+}
+
+@Composable
+fun PlayerScreen(
+    onBack: () -> Unit,
+    vm: PlayerViewModel = hiltViewModel()
+) {
+    val state by vm.state.collectAsStateWithLifecycle()
+    val current = state.current
+    val context = LocalContext.current
+    val activity = context as? Activity
+    var fullscreen by remember { mutableStateOf(false) }
+
+    fun setFullscreen(enabled: Boolean) {
+        val window = activity?.window ?: return
+        WindowCompat.setDecorFitsSystemWindows(window, !enabled)
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            if (enabled) {
+                hide(WindowInsetsCompat.Type.systemBars())
+                systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            } else {
+                show(WindowInsetsCompat.Type.systemBars())
+                activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            }
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { setFullscreen(false) }
+    }
+
+    Scaffold(
+        topBar = {
+            if (!fullscreen) {
+                TopAppBar(
+                    title = { Text(current?.title ?: "Player") },
+                    navigationIcon = {
+                        TextButton(onClick = onBack) { Text("Back") }
+                    }
+                )
+            }
+        }
+    ) { padding ->
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(if (fullscreen) PaddingValues(0.dp) else padding)
+                .padding(if (fullscreen) 0.dp else 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            AndroidView(
+                modifier = if (fullscreen) {
+                    Modifier.fillMaxWidth().weight(1f)
+                } else {
+                    Modifier.fillMaxWidth().aspectRatio(16f / 9f)
+                },
+                factory = { context ->
+                    PlayerView(context).apply {
+                        useController = true
+                        player = vm.exoPlayer
+                    }
+                },
+                update = { it.player = vm.exoPlayer }
+            )
+
+            if (!fullscreen) {
+                Text(current?.title ?: "Select a video from Home")
+
+                val duration = state.durationMs.coerceAtLeast(1L)
+                val progress = (state.positionMs.toFloat() / duration.toFloat())
+                    .coerceIn(0f, 1f)
+                Slider(
+                    value = progress,
+                    onValueChange = { vm.seek((it * duration).toLong()) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text("${state.positionMs / 1000}s / ${state.durationMs / 1000}s")
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = vm::previous) { Text("Previous") }
+                    Button(onClick = vm::toggle) {
+                        Text(if (state.isPlaying) "Pause" else "Play")
+                    }
+                    OutlinedButton(onClick = vm::next) { Text("Next") }
+                    OutlinedButton(
+                        onClick = {
+                            fullscreen = true
+                            setFullscreen(true)
+                        }
+                    ) { Text("Fullscreen") }
+                }
+
+                Text(
+                    "Queue ${if (state.queueIndex >= 0) state.queueIndex + 1 else 0}/${state.queue.size}",
+                    style = MaterialTheme.typography.titleMedium
+                )
+
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    items(state.queue, key = { it.id }) { item ->
+                        val selected = item.id == current?.id
+                        ListItem(
+                            modifier = Modifier.clickable {
+                                vm.queue(
+                                    state.queue,
+                                    state.queue.indexOf(item)
+                                )
+                            },
+                            headlineContent = { Text(item.title) },
+                            supportingContent = {
+                                Text(if (selected) "Playing" else item.source)
+                            }
+                        )
+                        HorizontalDivider()
+                    }
+                }
+            } else {
+                TextButton(
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                    onClick = {
+                        fullscreen = false
+                        setFullscreen(false)
+                    }
+                ) { Text("Exit Fullscreen") }
+            }
+        }
+    }
+}
+
+@Composable
+fun HistoryScreen(
+    onBack: () -> Unit,
+    openPlayer: () -> Unit,
+    vm: HistoryViewModel = hiltViewModel(),
+    player: PlayerViewModel = hiltViewModel()
+) {
+    val items by vm.items.collectAsStateWithLifecycle()
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("History") },
+                navigationIcon = {
+                    TextButton(onClick = onBack) { Text("Back") }
+                },
+                actions = {
+                    TextButton(onClick = vm::clear) { Text("Clear") }
+                }
+            )
+        }
+    ) { padding ->
+        LazyColumn(
+            Modifier.fillMaxSize().padding(padding).padding(16.dp)
+        ) {
+            items(items, key = { it.id }) { item ->
+                ListItem(
+                    headlineContent = { Text(item.title) },
+                    supportingContent = {
+                        Text("Resume at ${item.positionMs / 1000}s")
+                    },
+                    trailingContent = {
+                        TextButton(
+                            onClick = {
+                                player.play(
+                                    VideoEntity(
+                                        item.id,
+                                        item.title,
+                                        item.url,
+                                        item.thumbnailUrl,
+                                        item.durationMs
+                                    ),
+                                    item.positionMs
+                                )
+                                openPlayer()
+                            }
+                        ) { Text("Resume") }
+                    }
+                )
+                HorizontalDivider()
+            }
+        }
+    }
+}
+
+@Composable
+fun FavoritesScreen(
+    onBack: () -> Unit,
+    openPlayer: () -> Unit,
+    vm: FavoriteViewModel = hiltViewModel(),
+    player: PlayerViewModel = hiltViewModel()
+) {
+    val items by vm.items.collectAsStateWithLifecycle()
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Favorites") },
+                navigationIcon = {
+                    TextButton(onClick = onBack) { Text("Back") }
+                }
+            )
+        }
+    ) { padding ->
+        LazyColumn(
+            Modifier.fillMaxSize().padding(padding).padding(16.dp)
+        ) {
+            items(items, key = { it.id }) { item ->
+                ListItem(
+                    headlineContent = { Text(item.title) },
+                    supportingContent = { Text("Saved favorite") },
+                    trailingContent = {
+                        TextButton(
+                            onClick = {
+                                player.play(
+                                    VideoEntity(
+                                        item.id,
+                                        item.title,
+                                        item.url,
+                                        item.thumbnailUrl,
+                                        item.durationMs
+                                    )
+                                )
+                                openPlayer()
+                            }
+                        ) { Text("Play") }
+                    }
+                )
+                HorizontalDivider()
+            }
+        }
+    }
+}
+
+@Composable
+fun PlaylistsScreen(
+    onBack: () -> Unit,
+    openPlaylist: (String) -> Unit,
+    vm: PlaylistViewModel = hiltViewModel()
+) {
+    val playlists by vm.playlists.collectAsStateWithLifecycle()
+    var name by remember { mutableStateOf("") }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Playlists") },
+                navigationIcon = {
+                    TextButton(onClick = onBack) { Text("Back") }
+                }
+            )
+        }
+    ) { padding ->
+        Column(
+            Modifier.fillMaxSize().padding(padding).padding(16.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    modifier = Modifier.weight(1f),
+                    label = { Text("New playlist") }
+                )
+                Spacer(Modifier.width(8.dp))
+                Button(
+                    onClick = {
+                        vm.create(name)
+                        name = ""
+                    }
+                ) { Text("Add") }
+            }
+
+            LazyColumn {
+                items(playlists, key = { it.id }) { list ->
+                    ListItem(
+                        modifier = Modifier.clickable {
+                            openPlaylist(list.id)
+                        },
+                        headlineContent = { Text(list.name) },
+                        supportingContent = {
+                            Text("Tap to open playlist")
+                        },
+                        trailingContent = {
+                            TextButton(onClick = { vm.delete(list.id) }) {
+                                Text("Delete")
+                            }
+                        }
+                    )
+                    HorizontalDivider()
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PlaylistDetailScreen(
+    playlistId: String,
+    onBack: () -> Unit,
+    openPlayer: () -> Unit,
+    vm: PlaylistViewModel = hiltViewModel(),
+    home: HomeViewModel = hiltViewModel(),
+    player: PlayerViewModel = hiltViewModel()
+) {
+    val videos by vm.videos(playlistId).collectAsStateWithLifecycle(
+        initialValue = emptyList()
+    )
+    val library by home.items.collectAsStateWithLifecycle()
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Playlist") },
+                navigationIcon = {
+                    TextButton(onClick = onBack) { Text("Back") }
+                }
+            )
+        }
+    ) { padding ->
+        LazyColumn(
+            Modifier.fillMaxSize().padding(padding).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            item {
+                Text(
+                    "Playlist videos",
+                    style = MaterialTheme.typography.titleLarge
+                )
+            }
+
+            items(videos, key = { it.id }) { video ->
+                ListItem(
+                    headlineContent = { Text(video.title) },
+                    trailingContent = {
+                        TextButton(
+                            onClick = {
+                                player.queue(
+                                    videos,
+                                    videos.indexOf(video)
+                                )
+                                openPlayer()
+                            }
+                        ) { Text("Play") }
+                    }
+                )
+            }
+
+            item {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "Add from library",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+
+            items(library, key = { "lib_${it.id}" }) { video ->
+                ListItem(
+                    headlineContent = { Text(video.title) },
+                    trailingContent = {
+                        TextButton(
+                            onClick = { vm.add(playlistId, video.id) }
+                        ) { Text("Add") }
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun DownloadsScreen(
+    onBack: () -> Unit,
+    vm: DownloadViewModel = hiltViewModel()
+) {
+    val items by vm.downloads.collectAsStateWithLifecycle()
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Downloads") },
+                navigationIcon = {
+                    TextButton(onClick = onBack) { Text("Back") }
+                },
+                actions = {
+                    TextButton(onClick = vm::refresh) { Text("Refresh") }
+                }
+            )
+        }
+    ) { padding ->
+        LazyColumn(
+            Modifier.fillMaxSize().padding(padding).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            items(items, key = { it.id }) { item ->
+                ElevatedCard {
+                    Column(Modifier.padding(14.dp)) {
+                        Text(
+                            item.title,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(item.status)
+                        LinearProgressIndicator(
+                            progress = {
+                                item.progress.coerceIn(0, 100) / 100f
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Text("${item.progress}%")
+                        Row {
+                            if (
+                                item.status == "RUNNING" ||
+                                item.status == "PENDING" ||
+                                item.status == "PAUSED"
+                            ) {
+                                TextButton(
+                                    onClick = { vm.cancel(item.id) }
+                                ) { Text("Cancel") }
+                            }
+                            TextButton(
+                                onClick = { vm.remove(item.id) }
+                            ) { Text("Remove") }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun displayName(context: Context, uriString: String): String {
+    val uri = android.net.Uri.parse(uriString)
+    context.contentResolver.query(
+        uri,
+        arrayOf(OpenableColumns.DISPLAY_NAME),
+        null,
+        null,
+        null
+    )?.use { cursor ->
+        val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+        if (index >= 0 && cursor.moveToFirst()) {
+            return cursor.getString(index)
+        }
+    }
+    return "Local media"
+}

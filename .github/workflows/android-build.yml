@@ -1,0 +1,95 @@
+name: MPorTtube V5.3.1 Real Build Repair
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and Verify Debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      GRADLE_VERSION: "8.9"
+      JAVA_VERSION: "17"
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept SDK licenses and install compile SDK
+        run: |
+          set -euxo pipefail
+          yes | sdkmanager --licenses || true
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Install Gradle
+        run: |
+          set -euxo pipefail
+          curl -fsSL -o /tmp/gradle.zip \
+            "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip"
+          unzip -q /tmp/gradle.zip -d "$HOME"
+          echo "$HOME/gradle-${GRADLE_VERSION}/bin" >> "$GITHUB_PATH"
+
+      - name: Show environment
+        run: |
+          set -euxo pipefail
+          java -version
+          gradle --version
+          sdkmanager --version
+
+      - name: Resolve dependencies
+        run: |
+          set -o pipefail
+          gradle --no-daemon --stacktrace dependencies 2>&1 | tee gradle-dependencies.log
+
+      - name: Compile and assemble Debug APK
+        run: |
+          set -o pipefail
+          gradle --no-daemon --stacktrace clean assembleDebug 2>&1 | tee gradle-build.log
+
+      - name: Run unit tests
+        if: success()
+        run: |
+          set -o pipefail
+          gradle --no-daemon --stacktrace testDebugUnitTest 2>&1 | tee gradle-test.log
+
+      - name: Upload Debug APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MPorTtube-V5.3.1-Debug-APK
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload build logs and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MPorTtube-V5.3.1-Build-Reports
+          path: |
+            gradle-build.log
+            gradle-test.log
+            gradle-dependencies.log
+            app/build/reports/**
+            app/build/test-results/**
+          if-no-files-found: warn
+          retention-days: 14
