@@ -40,6 +40,7 @@ class PlayerManager @Inject constructor(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val queue = mutableListOf<VideoEntity>()
+    private val prefs = context.getSharedPreferences("mporttube_settings", Context.MODE_PRIVATE)
 
     private val _state = MutableStateFlow(PlayerUiState())
     val state: StateFlow<PlayerUiState> = _state.asStateFlow()
@@ -48,7 +49,10 @@ class PlayerManager @Inject constructor(
         player.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) = publish()
             override fun onPlaybackStateChanged(playbackState: Int) = publish()
-            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) = publish()
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO && !prefs.getBoolean("autoplay", true)) player.pause()
+                publish()
+            }
             override fun onPositionDiscontinuity(
                 oldPosition: Player.PositionInfo,
                 newPosition: Player.PositionInfo,
@@ -87,6 +91,7 @@ class PlayerManager @Inject constructor(
     }
 
     private fun ensurePlaybackService() {
+        if (!prefs.getBoolean("background_playback", true)) return
         val intent = Intent(context, PlaybackService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             context.startForegroundService(intent)
@@ -153,6 +158,14 @@ class PlayerManager @Inject constructor(
         if (player.hasPreviousMediaItem()) player.seekToPreviousMediaItem()
         else player.seekTo(0L)
         publish()
+    }
+
+    fun clearPlaybackData() {
+        player.pause()
+        player.stop()
+        player.clearMediaItems()
+        queue.clear()
+        _state.value = PlayerUiState()
     }
 
     fun release() {

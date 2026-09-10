@@ -122,13 +122,16 @@ class DownloadRepository @Inject constructor(
     fun downloads(): Flow<List<DownloadEntity>> = dao.observeAll()
 
     suspend fun enqueue(video: VideoEntity) {
+        val prefs = context.getSharedPreferences("mporttube_settings", Context.MODE_PRIVATE)
+        val wifiOnly = prefs.getBoolean("wifi_only", false)
+        val notifications = prefs.getBoolean("notifications", true)
         val request = DownloadManager.Request(Uri.parse(video.url))
             .setTitle(video.title)
             .setDescription("Downloading with MPorTtube")
             .setNotificationVisibility(
-                DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
+                if (notifications) DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED else DownloadManager.Request.VISIBILITY_HIDDEN
             )
-            .setAllowedOverMetered(true)
+            .setAllowedOverMetered(!wifiOnly)
             .setAllowedOverRoaming(false)
             .setDestinationInExternalFilesDir(
                 context,

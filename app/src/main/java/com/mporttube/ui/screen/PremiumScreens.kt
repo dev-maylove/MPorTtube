@@ -464,278 +464,202 @@ private fun LibraryButton(label: String, action: () -> Unit) {
 }
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit) {
-    var autoplay by rememberSaveable { mutableStateOf(true) }
-    var backgroundPlayback by rememberSaveable { mutableStateOf(true) }
-    var wifiOnly by rememberSaveable { mutableStateOf(false) }
-    var notifications by rememberSaveable { mutableStateOf(true) }
-    var highQuality by rememberSaveable { mutableStateOf(true) }
-    var dynamicTheme by rememberSaveable { mutableStateOf(false) }
-    var privateMode by rememberSaveable { mutableStateOf(false) }
+fun SettingsScreen(
+    onBack: () -> Unit,
+    onOpenAbout: () -> Unit,
+    onOpenPrivacy: () -> Unit,
+    onOpenDownloads: () -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val store = remember { com.mporttube.data.settings.SettingsStore(context.applicationContext) }
+    val autoplay by store.autoplay.collectAsState()
+    val backgroundPlayback by store.backgroundPlayback.collectAsState()
+    val wifiOnly by store.wifiOnly.collectAsState()
+    val notifications by store.notifications.collectAsState()
+    val highQuality by store.highQuality.collectAsState()
+    val dynamicTheme by store.dynamicTheme.collectAsState()
+    val privateMode by store.privateMode.collectAsState()
+    val downloadQuality by store.downloadQuality.collectAsState()
+    val interfaceStyle by store.interfaceStyle.collectAsState()
+    val player: PlayerViewModel = hiltViewModel()
+    var qualityDialog by rememberSaveable { mutableStateOf(false) }
+    var styleDialog by rememberSaveable { mutableStateOf(false) }
+    var clearDialog by rememberSaveable { mutableStateOf(false) }
+
+    if (qualityDialog) {
+        AlertDialog(
+            onDismissRequest = { qualityDialog = false },
+            title = { Text("Download quality") },
+            text = {
+                Column {
+                    listOf("Best available", "1080p preferred", "720p balanced", "Data saver").forEach { option ->
+                        ListItem(
+                            headlineContent = { Text(option) },
+                            modifier = Modifier.clickable { store.setDownloadQuality(option); qualityDialog = false },
+                            trailingContent = { RadioButton(selected = downloadQuality == option, onClick = { store.setDownloadQuality(option); qualityDialog = false }) }
+                        )
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { qualityDialog = false }) { Text("Close") } }
+        )
+    }
+    if (styleDialog) {
+        AlertDialog(
+            onDismissRequest = { styleDialog = false },
+            title = { Text("Interface style") },
+            text = {
+                Column {
+                    listOf("Premium dark", "Midnight blue", "OLED black").forEach { option ->
+                        ListItem(
+                            headlineContent = { Text(option) },
+                            modifier = Modifier.clickable { store.setInterfaceStyle(option); styleDialog = false },
+                            trailingContent = { RadioButton(selected = interfaceStyle == option, onClick = { store.setInterfaceStyle(option); styleDialog = false }) }
+                        )
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { styleDialog = false }) { Text("Close") } }
+        )
+    }
+    if (clearDialog) {
+        AlertDialog(
+            onDismissRequest = { clearDialog = false },
+            title = { Text("Clear playback data?") },
+            text = { Text("The current player queue and temporary playback state will be cleared. Your saved favorites and playlists are not removed.") },
+            confirmButton = { TextButton(onClick = { player.clearPlaybackData(); clearDialog = false }) { Text("Clear") } },
+            dismissButton = { TextButton(onClick = { clearDialog = false }) { Text("Cancel") } }
+        )
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Column {
-                        Text("Settings", fontWeight = FontWeight.Bold)
-                        Text(
-                            "Personalize your MPorTtube experience",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.secondary
-                        )
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
-                    }
-                }
+                title = { Column { Text("Settings", fontWeight = FontWeight.Bold); Text("Personalize your MPorTtube experience", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary) } },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } }
             )
         }
     ) { padding ->
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
+            modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 32.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             item {
-                ElevatedCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.elevatedCardColors(
-                        containerColor = Color(0xFF101D31)
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(18.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(54.dp)
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(
-                                    Brush.linearGradient(
-                                        listOf(Color(0xFF3B8DFF), Color(0xFF6B42D8))
-                                    )
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Filled.AutoAwesome,
-                                contentDescription = null,
-                                tint = Color.White
-                            )
-                        }
-                        Spacer(Modifier.width(14.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text("MPorTtube Premium", fontWeight = FontWeight.Bold)
-                            Text(
-                                "Smart controls • Media3 • Background playback",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF9EB9D6)
-                            )
-                        }
+                ElevatedCard(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = Color(0xFF101D31))) {
+                    Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(54.dp).clip(RoundedCornerShape(16.dp)).background(Brush.linearGradient(listOf(Color(0xFF3B8DFF), Color(0xFF6B42D8)))), contentAlignment = Alignment.Center) { Icon(Icons.Filled.AutoAwesome, null, tint = Color.White) }
+                        Spacer(Modifier.width(14.dp)); Column(Modifier.weight(1f)) { Text("MPorTtube Premium", fontWeight = FontWeight.Bold); Text("Your preferences are saved automatically", style = MaterialTheme.typography.bodySmall, color = Color(0xFF9EB9D6)) }
                     }
                 }
             }
-
             item { SettingsSectionTitle("Playback", Icons.Filled.PlayCircle) }
-            item {
-                SettingsPanel {
-                    SettingsSwitchRow(
-                        title = "Autoplay next",
-                        subtitle = "Continue with the next item in your queue",
-                        checked = autoplay,
-                        onCheckedChange = { autoplay = it }
-                    )
-                    HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
-                    SettingsSwitchRow(
-                        title = "Background playback",
-                        subtitle = "Keep audio playing when the app is not visible",
-                        checked = backgroundPlayback,
-                        onCheckedChange = { backgroundPlayback = it }
-                    )
-                    HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
-                    SettingsSwitchRow(
-                        title = "High quality by default",
-                        subtitle = "Prefer the best available stream quality",
-                        checked = highQuality,
-                        onCheckedChange = { highQuality = it }
-                    )
-                }
-            }
-
+            item { SettingsPanel {
+                SettingsSwitchRow("Autoplay next", "Continue with the next item in your queue", autoplay, store::setAutoplay)
+                HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
+                SettingsSwitchRow("Background playback", "Keep audio playing when the app is not visible", backgroundPlayback, store::setBackgroundPlayback)
+                HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
+                SettingsSwitchRow("High quality by default", "Prefer the best available stream quality", highQuality, store::setHighQuality)
+            } }
             item { SettingsSectionTitle("Downloads & Network", Icons.Filled.Download) }
-            item {
-                SettingsPanel {
-                    SettingsSwitchRow(
-                        title = "Wi‑Fi only downloads",
-                        subtitle = "Avoid mobile data for new downloads",
-                        checked = wifiOnly,
-                        onCheckedChange = { wifiOnly = it },
-                        icon = Icons.Filled.Wifi
-                    )
-                    HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
-                    SettingsActionRow(
-                        title = "Download quality",
-                        subtitle = if (highQuality) "Best available" else "Balanced",
-                        icon = Icons.Filled.Download
-                    )
-                    HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
-                    SettingsActionRow(
-                        title = "Storage manager",
-                        subtitle = "Review downloads and local media usage",
-                        icon = Icons.Filled.Storage
-                    )
-                }
-            }
-
+            item { SettingsPanel {
+                SettingsSwitchRow("Wi‑Fi only downloads", "Avoid mobile data for new downloads", wifiOnly, store::setWifiOnly, Icons.Filled.Wifi)
+                HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
+                SettingsActionRow("Download quality", downloadQuality, Icons.Filled.Download) { qualityDialog = true }
+                HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
+                SettingsActionRow("Storage manager", "Review active downloads and local media", Icons.Filled.Storage, onClick = onOpenDownloads)
+            } }
             item { SettingsSectionTitle("Appearance", Icons.Filled.DarkMode) }
-            item {
-                SettingsPanel {
-                    SettingsSwitchRow(
-                        title = "Dynamic appearance",
-                        subtitle = "Use your device accent when supported",
-                        checked = dynamicTheme,
-                        onCheckedChange = { dynamicTheme = it },
-                        icon = Icons.Filled.DarkMode
-                    )
-                    HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
-                    SettingsActionRow(
-                        title = "Interface style",
-                        subtitle = "Premium dark",
-                        icon = Icons.Filled.SettingsSuggest
-                    )
-                }
-            }
-
+            item { SettingsPanel {
+                SettingsSwitchRow("Dynamic appearance", "Save device-aware appearance preference", dynamicTheme, store::setDynamicTheme, Icons.Filled.DarkMode)
+                HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
+                SettingsActionRow("Interface style", interfaceStyle, Icons.Filled.SettingsSuggest) { styleDialog = true }
+            } }
             item { SettingsSectionTitle("Privacy & System", Icons.Filled.Security) }
-            item {
-                SettingsPanel {
-                    SettingsSwitchRow(
-                        title = "Private session",
-                        subtitle = "Keep new activity out of visible history",
-                        checked = privateMode,
-                        onCheckedChange = { privateMode = it },
-                        icon = Icons.Filled.Security
-                    )
-                    HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
-                    SettingsSwitchRow(
-                        title = "Download notifications",
-                        subtitle = "Show progress and completion updates",
-                        checked = notifications,
-                        onCheckedChange = { notifications = it }
-                    )
-                    HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
-                    SettingsActionRow(
-                        title = "Clear playback data",
-                        subtitle = "Manage temporary player data and cache",
-                        icon = Icons.Filled.DeleteSweep
-                    )
-                }
-            }
-
+            item { SettingsPanel {
+                SettingsSwitchRow("Private session", "Save private-session preference for future playback features", privateMode, store::setPrivateMode, Icons.Filled.Security)
+                HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
+                SettingsSwitchRow("Download notifications", "Show progress and completion updates", notifications, store::setNotifications)
+                HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
+                SettingsActionRow("Clear playback data", "Clear current queue and temporary player state", Icons.Filled.DeleteSweep) { clearDialog = true }
+                HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
+                SettingsActionRow("Privacy policy", "How MPorTtube handles permissions and data", Icons.Filled.Security, onClick = onOpenPrivacy)
+            } }
             item { SettingsSectionTitle("About", Icons.Filled.Info) }
-            item {
-                SettingsPanel {
-                    SettingsActionRow(
-                        title = "MPorTtube",
-                        subtitle = "Version 5.3.3 • Premium UI & splash repair",
-                        icon = Icons.Filled.Info,
-                        showArrow = false
-                    )
-                }
-            }
+            item { SettingsPanel {
+                SettingsActionRow("About MPorTtube", "Version 5.3.4 • App information, features and credits", Icons.Filled.Info, onClick = onOpenAbout)
+            } }
         }
     }
 }
 
 @Composable
-private fun SettingsSectionTitle(
-    title: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(top = 6.dp, start = 4.dp)
-    ) {
-        Icon(icon, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(8.dp))
-        Text(
-            title,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold
-        )
+fun AboutScreen(onBack: () -> Unit) {
+    Scaffold(topBar = { TopAppBar(title = { Text("About MPorTtube") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } }) }) { padding ->
+        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            item {
+                ElevatedCard(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Image(painterResource(R.drawable.app_logo), "MPorTtube logo", Modifier.size(118.dp), contentScale = ContentScale.Fit)
+                        Spacer(Modifier.height(14.dp)); Text("MPorTtube", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        Text("Premium Media Experience", color = MaterialTheme.colorScheme.secondary)
+                        Spacer(Modifier.height(10.dp)); Text("Version 5.3.4", style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+            }
+            item { AboutCard("What is MPorTtube?", "MPorTtube is a modern media application focused on local media, playback queues, playlists, favorites, history, downloads and a premium Android experience.") }
+            item { AboutCard("Core technology", "Kotlin • Jetpack Compose • Material 3 • Media3 / ExoPlayer • Room • Hilt • Android foreground media service.") }
+            item { AboutCard("Important notice", "MPorTtube is designed to play media that you own or are authorized to access. Respect copyright, platform rules and applicable laws when using online media sources.") }
+            item { Text("© 2026 MPorTtube. All rights reserved.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF93A6BC)) }
+        }
     }
+}
+
+@Composable
+fun PrivacyPolicyScreen(onBack: () -> Unit) {
+    Scaffold(topBar = { TopAppBar(title = { Text("Privacy Policy") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } }) }) { padding ->
+        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            item { Text("Privacy Policy", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold); Text("Effective date: September 10, 2026", style = MaterialTheme.typography.bodySmall, color = Color(0xFF93A6BC)) }
+            item { AboutCard("1. Data we handle", "MPorTtube stores app preferences and media-library data on your device. Local playback history, favorites, playlists and download records are used to provide app features.") }
+            item { AboutCard("2. Permissions", "Media permissions are requested only for features that browse or play media files. Notification permission is used for download and playback status when supported by Android.") }
+            item { AboutCard("3. Network access", "Internet access may be used when you intentionally access network media or download content. MPorTtube should not silently upload your personal media library.") }
+            item { AboutCard("4. Local storage", "Preferences are stored locally. Clearing app data from Android settings can remove locally stored preferences and app databases.") }
+            item { AboutCard("5. Third-party content", "External media sources may have their own privacy policies and terms. You are responsible for reviewing those policies before using third-party services.") }
+            item { AboutCard("6. Your choices", "You can change app preferences in Settings, manage downloads, and clear playback state. Android system settings control app permissions and notification access.") }
+            item { AboutCard("7. Changes", "This policy may be updated as the application evolves. The effective date shown on this page identifies the current in-app policy version.") }
+            item { Text("For a production release, replace this in-app policy with your final legal/privacy policy and support contact details.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary) }
+        }
+    }
+}
+
+@Composable
+private fun AboutCard(title: String, body: String) {
+    ElevatedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(18.dp)) { Text(title, fontWeight = FontWeight.Bold); Spacer(Modifier.height(7.dp)); Text(body, color = Color(0xFFB7C6D8)) } }
+}
+
+@Composable
+private fun SettingsSectionTitle(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp, start = 4.dp)) { Icon(icon, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
 }
 
 @Composable
 private fun SettingsPanel(content: @Composable ColumnScope.() -> Unit) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(22.dp)),
-        shape = RoundedCornerShape(22.dp),
-        color = Color(0xFF0D1829),
-        tonalElevation = 2.dp
-    ) {
-        Column(content = content)
+    Surface(modifier = Modifier.fillMaxWidth().border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(22.dp)), shape = RoundedCornerShape(22.dp), color = Color(0xFF0D1829), tonalElevation = 2.dp) { Column(content = content) }
+}
+
+@Composable
+private fun SettingsSwitchRow(title: String, subtitle: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit, icon: androidx.compose.ui.graphics.vector.ImageVector? = null) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (icon != null) { Icon(icon, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(22.dp)); Spacer(Modifier.width(12.dp)) }
+        Column(Modifier.weight(1f)) { Text(title, fontWeight = FontWeight.SemiBold); Spacer(Modifier.height(2.dp)); Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Color(0xFF93A6BC)) }
+        Spacer(Modifier.width(12.dp)); Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 
 @Composable
-private fun SettingsSwitchRow(
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    icon: androidx.compose.ui.graphics.vector.ImageVector? = null
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 13.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        if (icon != null) {
-            Icon(icon, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(22.dp))
-            Spacer(Modifier.width(12.dp))
-        }
-        Column(Modifier.weight(1f)) {
-            Text(title, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(2.dp))
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Color(0xFF93A6BC))
-        }
-        Spacer(Modifier.width(12.dp))
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
-    }
-}
-
-@Composable
-private fun SettingsActionRow(
-    title: String,
-    subtitle: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    showArrow: Boolean = true
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { }
-            .padding(horizontal = 16.dp, vertical = 15.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(icon, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(22.dp))
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(title, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(2.dp))
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Color(0xFF93A6BC))
-        }
-        if (showArrow) Text("›", fontSize = 28.sp, color = MaterialTheme.colorScheme.secondary)
+private fun SettingsActionRow(title: String, subtitle: String, icon: androidx.compose.ui.graphics.vector.ImageVector, showArrow: Boolean = true, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(22.dp)); Spacer(Modifier.width(12.dp)); Column(Modifier.weight(1f)) { Text(title, fontWeight = FontWeight.SemiBold); Spacer(Modifier.height(2.dp)); Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Color(0xFF93A6BC)) }; if (showArrow) Text("›", fontSize = 28.sp, color = MaterialTheme.colorScheme.secondary)
     }
 }
 

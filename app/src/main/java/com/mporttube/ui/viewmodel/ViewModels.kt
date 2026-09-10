@@ -10,6 +10,8 @@ import com.mporttube.data.repository.PlaylistRepository
 import com.mporttube.data.repository.VideoRepository
 import com.mporttube.player.PlayerManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import android.content.Context
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.isActive
@@ -40,7 +42,8 @@ class HomeViewModel @Inject constructor(
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
     private val manager: PlayerManager,
-    private val history: HistoryRepository
+    private val history: HistoryRepository,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     val state = manager.state
@@ -52,6 +55,7 @@ class PlayerViewModel @Inject constructor(
             var lastSavedAt = 0L
 
             state.collect { playerState ->
+                if (context.getSharedPreferences("mporttube_settings", Context.MODE_PRIVATE).getBoolean("private_mode", false)) return@collect
                 val videoId = playerState.current?.id ?: return@collect
                 val now = System.currentTimeMillis()
 
@@ -80,8 +84,10 @@ class PlayerViewModel @Inject constructor(
     fun seek(pos: Long) = manager.seekTo(pos)
     fun next() = manager.next()
     fun previous() = manager.previous()
+    fun clearPlaybackData() = manager.clearPlaybackData()
 
     fun saveHistory() {
+        if (context.getSharedPreferences("mporttube_settings", Context.MODE_PRIVATE).getBoolean("private_mode", false)) return
         val current = state.value.current ?: return
         viewModelScope.launch {
             history.save(current.id, manager.player.currentPosition)
