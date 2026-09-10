@@ -2,7 +2,7 @@
 <resources>
     <style name="Theme.MPorTtube.Starting" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">#000000</item>
-        <item name="windowSplashScreenAnimatedIcon">@drawable/app_logo</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_safe</item>
         <item name="postSplashScreenTheme">@style/Theme.MPorTtube</item>
     </style>
 </resources>
