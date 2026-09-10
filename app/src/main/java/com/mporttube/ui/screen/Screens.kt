@@ -889,8 +889,22 @@ fun LocalVideoScreen(onBack: () -> Unit, onOpenPlayer: () -> Unit) {
 }
 
 private fun hasVideoPermission(context: Context): Boolean {
-    val permission = if (android.os.Build.VERSION.SDK_INT >= 33) android.Manifest.permission.READ_MEDIA_VIDEO else android.Manifest.permission.READ_EXTERNAL_STORAGE
-    return androidx.core.content.ContextCompat.checkSelfPermission(context, permission) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    if (android.os.Build.VERSION.SDK_INT >= 33) {
+        val full = androidx.core.content.ContextCompat.checkSelfPermission(
+            context, android.Manifest.permission.READ_MEDIA_VIDEO
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (full) return true
+        // Android 14 can grant access to a user-selected subset of visual media.
+        if (android.os.Build.VERSION.SDK_INT >= 34) {
+            return androidx.core.content.ContextCompat.checkSelfPermission(
+                context, android.Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+        return false
+    }
+    return androidx.core.content.ContextCompat.checkSelfPermission(
+        context, android.Manifest.permission.READ_EXTERNAL_STORAGE
+    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
 }
 
 private fun loadDeviceVideos(context: Context): List<VideoEntity> {

@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.media3.common.C
+import androidx.media3.common.AudioAttributes
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
@@ -29,14 +30,23 @@ data class PlayerUiState(
     val isPlaying: Boolean = false,
     val positionMs: Long = 0L,
     val durationMs: Long = 0L,
-    val playbackState: Int = Player.STATE_IDLE
+    val playbackState: Int = Player.STATE_IDLE,
+    val errorMessage: String? = null
 )
 
 @Singleton
 class PlayerManager @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    val player: ExoPlayer = ExoPlayer.Builder(context).build()
+    private val audioAttributes = AudioAttributes.Builder()
+        .setUsage(C.USAGE_MEDIA)
+        .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+        .build()
+
+    val player: ExoPlayer = ExoPlayer.Builder(context).build().apply {
+        setAudioAttributes(audioAttributes, true)
+        setHandleAudioBecomingNoisy(true)
+    }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val queue = mutableListOf<VideoEntity>()
@@ -53,6 +63,9 @@ class PlayerManager @Inject constructor(
                 if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO && !prefs.getBoolean("autoplay", true)) player.pause()
                 publish()
             }
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                publish(error.message ?: "Playback error")
+            }
             override fun onPositionDiscontinuity(
                 oldPosition: Player.PositionInfo,
                 newPosition: Player.PositionInfo,
@@ -68,7 +81,7 @@ class PlayerManager @Inject constructor(
         }
     }
 
-    private fun publish() {
+    private fun publish(errorMessage: String? = null) {
         val index = player.currentMediaItemIndex
             .takeIf { it in queue.indices }
             ?: -1
@@ -86,7 +99,8 @@ class PlayerManager @Inject constructor(
             isPlaying = player.isPlaying,
             positionMs = player.currentPosition.coerceAtLeast(0L),
             durationMs = duration,
-            playbackState = player.playbackState
+            playbackState = player.playbackState,
+            errorMessage = errorMessage
         )
     }
 
@@ -152,6 +166,10 @@ class PlayerManager @Inject constructor(
         player.seekTo(position.coerceAtLeast(0L))
         publish()
     }
+
+    fun setRepeatMode(mode: Int) { player.repeatMode = mode; publish() }
+
+    fun setShuffle(enabled: Boolean) { player.shuffleModeEnabled = enabled; publish() }
 
     fun next() {
         if (player.hasNextMediaItem()) player.seekToNextMediaItem()

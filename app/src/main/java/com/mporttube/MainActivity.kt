@@ -14,8 +14,7 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        // Runtime permissions are requested only when the related feature is used.
-        // Asking for notifications during startup could interrupt launch on some devices.
+        // Runtime permissions are requested by the Compose app immediately after the splash screen.
         setContent { MPorTtubeApp() }
     }
 }

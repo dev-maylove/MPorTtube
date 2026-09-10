@@ -1,1 +1,1 @@
-5.4.2
+MPorTtube V5.4.4 - Media3 ExoPlayer Integration

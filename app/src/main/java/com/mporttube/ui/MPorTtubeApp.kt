@@ -10,6 +10,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.collectAsState
 import androidx.compose.material3.dynamicDarkColorScheme
 import android.os.Build
@@ -72,10 +75,34 @@ fun MPorTtubeApp() {
 
     MaterialTheme(colorScheme = colorScheme) {
         var splash by rememberSaveable { mutableStateOf(true) }
+        val permissionLauncher = rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestMultiplePermissions()
+        ) { }
+        var startupPermissionRequested by rememberSaveable { mutableStateOf(false) }
 
         if (splash) {
             PremiumSplashScreen { splash = false }
             return@MaterialTheme
+        }
+
+        LaunchedEffect(Unit) {
+            if (!startupPermissionRequested) {
+                startupPermissionRequested = true
+                val permissions = buildList {
+                    if (Build.VERSION.SDK_INT >= 33) {
+                        add(android.Manifest.permission.READ_MEDIA_AUDIO)
+                        add(android.Manifest.permission.READ_MEDIA_VIDEO)
+                        add(android.Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        add(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+                    }
+                }.filter {
+                    androidx.core.content.ContextCompat.checkSelfPermission(
+                        context, it
+                    ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                }.toTypedArray()
+                if (permissions.isNotEmpty()) permissionLauncher.launch(permissions)
+            }
         }
 
         val nav = rememberNavController()
@@ -87,7 +114,9 @@ fun MPorTtubeApp() {
                     onSearch = { nav.navigate("search") },
                     onQueue = { nav.navigate("queue") },
                     onLibrary = { nav.navigate("library") },
-                    onSettings = { nav.navigate("settings") }
+                    onSettings = { nav.navigate("settings") },
+                    onOpenMusic = { nav.navigate("music") },
+                    onOpenLocalVideo = { nav.navigate("local_videos") }
                 )
             }
 
