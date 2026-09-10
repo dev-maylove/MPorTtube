@@ -79,6 +79,7 @@ fun HomeScreen(
     openFavorites: () -> Unit,
     openPlaylists: () -> Unit,
     openDownloads: () -> Unit,
+    openMusic: () -> Unit = {},
     vm: HomeViewModel = hiltViewModel(),
     player: PlayerViewModel = hiltViewModel(),
     downloads: DownloadViewModel = hiltViewModel()
@@ -120,9 +121,15 @@ fun HomeScreen(
                     }
                 },
                 actions = {
-                    TextButton(
-                        onClick = { localPicker.launch(arrayOf("video/*", "audio/*")) }
-                    ) { Text("Add local") }
+                    TextButton(onClick = openMusic) { Text("Music") }
+                    TextButton(onClick = {
+                        val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(android.content.Intent.EXTRA_TEXT, "MPorTtube - Premium media player")
+                        }
+                        context.startActivity(android.content.Intent.createChooser(intent, "Share MPorTtube"))
+                    }) { Text("Share") }
+                    TextButton(onClick = { localPicker.launch(arrayOf("video/*", "audio/*")) }) { Text("Add local") }
                 }
             )
         },
@@ -716,4 +723,105 @@ private fun displayName(context: Context, uriString: String): String {
         }
     }
     return "Local media"
+}
+
+/** Local music browser backed by Android MediaStore. No network or scraping is used. */
+@Composable
+fun MusicScreen(onBack: () -> Unit, onOpenPlayer: () -> Unit) {
+    val context = LocalContext.current
+    var granted by remember { mutableStateOf(hasAudioPermission(context)) }
+    var tracks by remember { mutableStateOf(emptyList<VideoEntity>()) }
+    val playerVm: PlayerViewModel = hiltViewModel()
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        if (android.os.Build.VERSION.SDK_INT >= 33)
+            ActivityResultContracts.RequestPermission()
+        else ActivityResultContracts.RequestPermission()
+    ) { ok ->
+        granted = ok
+        if (ok) tracks = loadDeviceMusic(context)
+    }
+    val notificationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
+    androidx.compose.runtime.LaunchedEffect(granted) {
+        if (granted) tracks = loadDeviceMusic(context)
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Column { Text("Music"); Text("Local device library", style = MaterialTheme.typography.labelSmall) } },
+                navigationIcon = { IconButton(onClick = onBack) { Text("‹", style = MaterialTheme.typography.headlineMedium) } },
+                actions = {
+                    TextButton(onClick = {
+                        if (android.os.Build.VERSION.SDK_INT >= 33) notificationLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                    }) { Text("Notifications") }
+                    TextButton(onClick = {
+                        val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(android.content.Intent.EXTRA_TEXT, "MPorTtube - Premium local music and media player")
+                        }
+                        context.startActivity(android.content.Intent.createChooser(intent, "Share MPorTtube"))
+                    }) { Text("Share") }
+                }
+            )
+        },
+        bottomBar = { MiniPlayer(onOpenPlayer) }
+    ) { padding ->
+        if (!granted) {
+            Column(Modifier.fillMaxSize().padding(padding).padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("Allow music access", style = MaterialTheme.typography.headlineSmall)
+                Spacer(Modifier.height(10.dp))
+                Text("MPorTtube needs storage/media permission to read music already stored on your device.")
+                Spacer(Modifier.height(18.dp))
+                Button(onClick = {
+                    val permission = if (android.os.Build.VERSION.SDK_INT >= 33) android.Manifest.permission.READ_MEDIA_AUDIO else android.Manifest.permission.READ_EXTERNAL_STORAGE
+                    permissionLauncher.launch(permission)
+                }) { Text("Allow Music Access") }
+            }
+        } else {
+            LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                item { Text("Songs on this device", style = MaterialTheme.typography.titleLarge) }
+                if (tracks.isEmpty()) item { Text("No music found in device storage.") }
+                items(tracks, key = { it.id }) { track ->
+                    ElevatedCard(Modifier.fillMaxWidth().clickable {
+                        playerVm.queue(tracks, tracks.indexOf(track))
+                        onOpenPlayer()
+                    }) {
+                        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(track.title, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(track.source, style = MaterialTheme.typography.bodySmall)
+                            }
+                            TextButton(onClick = { playerVm.queue(tracks, tracks.indexOf(track)); onOpenPlayer() }) { Text("Play") }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun hasAudioPermission(context: Context): Boolean {
+    val permission = if (android.os.Build.VERSION.SDK_INT >= 33) android.Manifest.permission.READ_MEDIA_AUDIO else android.Manifest.permission.READ_EXTERNAL_STORAGE
+    return androidx.core.content.ContextCompat.checkSelfPermission(context, permission) == android.content.pm.PackageManager.PERMISSION_GRANTED
+}
+
+private fun loadDeviceMusic(context: Context): List<VideoEntity> {
+    val result = mutableListOf<VideoEntity>()
+    val collection = if (android.os.Build.VERSION.SDK_INT >= 29) android.provider.MediaStore.Audio.Media.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL) else android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+    val projection = arrayOf(android.provider.MediaStore.Audio.Media._ID, android.provider.MediaStore.Audio.Media.TITLE, android.provider.MediaStore.Audio.Media.ARTIST)
+    context.contentResolver.query(collection, projection, android.provider.MediaStore.Audio.Media.IS_MUSIC + "!=0", null, android.provider.MediaStore.Audio.Media.TITLE + " ASC")?.use { c ->
+        val idCol = c.getColumnIndexOrThrow(android.provider.MediaStore.Audio.Media._ID)
+        val titleCol = c.getColumnIndexOrThrow(android.provider.MediaStore.Audio.Media.TITLE)
+        val artistCol = c.getColumnIndexOrThrow(android.provider.MediaStore.Audio.Media.ARTIST)
+        while (c.moveToNext()) {
+            val id = c.getLong(idCol)
+            val uri = android.content.ContentUris.withAppendedId(collection, id)
+            val title = c.getString(titleCol) ?: "Unknown title"
+            val artist = c.getString(artistCol) ?: "Unknown artist"
+            result += VideoEntity(id = "music_$id", title = title, url = uri.toString(), source = artist)
+        }
+    }
+    return result
 }

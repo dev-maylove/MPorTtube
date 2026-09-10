@@ -22,6 +22,7 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.Button
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
@@ -30,12 +31,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.platform.LocalContext
 
-private const val YOUTUBE_HOME = "https://m.youtube.com/"
+private const val YOUTUBE_HOME = "https://www.youtube.com/"
 
 /**
  * Home intentionally uses the official YouTube web experience instead of
@@ -53,6 +55,7 @@ fun YouTubeHomeScreen(
     var webView by remember { mutableStateOf<WebView?>(null) }
     var loading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var webViewKey by remember { mutableStateOf(0) }
 
     BackHandler(enabled = webView?.canGoBack() == true) {
         webView?.goBack()
@@ -77,7 +80,7 @@ fun YouTubeHomeScreen(
                     IconButton(onClick = {
                         errorMessage = null
                         loading = true
-                        webView?.loadUrl(YOUTUBE_HOME)
+                        if (webView == null) webViewKey++ else webView?.loadUrl(YOUTUBE_HOME)
                     }) { Text("↻") }
                     IconButton(onClick = onOpenSettings) { Text("⚙") }
                 }
@@ -111,6 +114,7 @@ fun YouTubeHomeScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            key(webViewKey) {
             AndroidView(
                 modifier = Modifier.fillMaxSize(),
                 factory = { viewContext ->
@@ -120,6 +124,7 @@ fun YouTubeHomeScreen(
                             ViewGroup.LayoutParams.MATCH_PARENT
                         )
                         settings.javaScriptEnabled = true
+                        settings.userAgentString = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Mobile Safari/537.36"
                         settings.domStorageEnabled = true
                         settings.loadsImagesAutomatically = true
                         settings.mediaPlaybackRequiresUserGesture = true
@@ -177,7 +182,9 @@ fun YouTubeHomeScreen(
                                 // Returning true prevents the host app from force closing when
                                 // Android's WebView renderer is killed by the system.
                                 loading = false
-                                errorMessage = "Renderer YouTube dihentikan sistem. Tekan refresh untuk memuat ulang."
+                                errorMessage = "Renderer YouTube dihentikan sistem. Halaman akan dibuat ulang."
+                                webView = null
+                                webViewKey++
                                 return true
                             }
                         }
@@ -187,6 +194,7 @@ fun YouTubeHomeScreen(
                 },
                 update = { current -> webView = current }
             )
+            }
 
             if (loading) {
                 CircularProgressIndicator(
@@ -195,11 +203,15 @@ fun YouTubeHomeScreen(
             }
 
             errorMessage?.let { message ->
-                Text(
-                    text = message,
+                androidx.compose.foundation.layout.Column(
                     modifier = Modifier.align(Alignment.Center),
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(text = message, color = MaterialTheme.colorScheme.onSurface)
+                    Button(onClick = {
+                        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(YOUTUBE_HOME))) }
+                    }) { Text("Buka YouTube di Browser / Aplikasi") }
+                }
             }
         }
     }

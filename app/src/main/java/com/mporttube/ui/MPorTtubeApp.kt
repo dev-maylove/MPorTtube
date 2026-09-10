@@ -25,7 +25,8 @@ import com.mporttube.ui.screen.PlayerScreen
 import com.mporttube.ui.screen.PlaylistDetailScreen
 import com.mporttube.ui.screen.PlaylistsScreen
 import com.mporttube.ui.screen.PremiumHomeScreen
-import com.mporttube.ui.screen.YouTubeHomeScreen
+import com.mporttube.ui.screen.HomeScreen
+import com.mporttube.ui.screen.MusicScreen
 import com.mporttube.ui.screen.PremiumSplashScreen
 import com.mporttube.ui.screen.QueueScreen
 import com.mporttube.ui.screen.SearchScreen
@@ -81,9 +82,20 @@ fun MPorTtubeApp() {
 
         NavHost(navController = nav, startDestination = "home") {
             composable("home") {
-                YouTubeHomeScreen(
-                    onOpenLibrary = { nav.navigate("library") },
-                    onOpenSettings = { nav.navigate("settings") }
+                HomeScreen(
+                    openPlayer = { nav.navigate("player") },
+                    openHistory = { nav.navigate("history") },
+                    openFavorites = { nav.navigate("favorites") },
+                    openPlaylists = { nav.navigate("playlists") },
+                    openDownloads = { nav.navigate("downloads") },
+                    openMusic = { nav.navigate("music") }
+                )
+            }
+
+            composable("music") {
+                MusicScreen(
+                    onBack = { nav.popBackStack() },
+                    onOpenPlayer = { nav.navigate("player") }
                 )
             }
 

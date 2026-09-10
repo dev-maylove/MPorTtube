@@ -14,8 +14,8 @@ android {
         applicationId = "com.mporttube"
         minSdk = 24
         targetSdk = 35
-        versionCode = 11
-        versionName = "5.3.5"
+        versionCode = 12
+        versionName = "5.3.8"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
