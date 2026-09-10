@@ -1,4 +1,4 @@
-name: MPorTtube V5.3.6 Build — Warning & Deprecation Repair
+name: MPorTtube V5.3.9 Build Repair
 
 on:
   push:
@@ -13,9 +13,8 @@ permissions:
 jobs:
   build:
     name: Build and Verify Debug APK
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
-
     env:
       GRADLE_VERSION: "8.9"
       JAVA_VERSION: "17"
@@ -32,45 +31,75 @@ jobs:
           java-version: ${{ env.JAVA_VERSION }}
           cache: gradle
 
-      - name: Verify Android SDK
+      - name: Locate Android SDK tools
+        shell: bash
         run: |
           set -euxo pipefail
-          command -v sdkmanager
-          sdkmanager --version
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "$SDK_ROOT"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager -print -quit 2>/dev/null || true)"
+          fi
+          if [ -z "${SDKMANAGER:-}" ] || [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(command -v sdkmanager || true)"
+          fi
+          test -n "${SDKMANAGER:-}"
+          test -x "$SDKMANAGER"
+          echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
+          echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
+          "$SDKMANAGER" --version
 
-      - name: Accept SDK licenses and install compile SDK
+      - name: Accept SDK licenses and install required packages
+        shell: bash
         run: |
           set -euxo pipefail
-          yes | sdkmanager --licenses || true
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses || true
+          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
 
       - name: Install Gradle
+        shell: bash
         run: |
           set -euxo pipefail
-          curl -fsSL -o /tmp/gradle.zip \
-            "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip"
+          curl -fsSL -o /tmp/gradle.zip "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip"
           unzip -q /tmp/gradle.zip -d "$HOME"
           echo "$HOME/gradle-${GRADLE_VERSION}/bin" >> "$GITHUB_PATH"
+
+      - name: Configure Android SDK for Gradle
+        shell: bash
+        run: |
+          set -euxo pipefail
+          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+          test -d "$ANDROID_HOME/platforms/android-35"
+          test -d "$ANDROID_HOME/build-tools/35.0.0"
 
       - name: Show environment
         run: |
           set -euxo pipefail
           java -version
           gradle --version
-          sdkmanager --version
+          "$SDKMANAGER" --version
 
       - name: Resolve dependencies
+        shell: bash
         run: |
           set -o pipefail
           gradle --no-daemon --warning-mode all --stacktrace dependencies 2>&1 | tee gradle-dependencies.log
 
       - name: Compile and assemble Debug APK
+        shell: bash
         run: |
           set -o pipefail
           gradle --no-daemon --warning-mode all --stacktrace clean assembleDebug 2>&1 | tee gradle-build.log
 
       - name: Run unit tests
         if: success()
+        shell: bash
         run: |
           set -o pipefail
           gradle --no-daemon --warning-mode all --stacktrace testDebugUnitTest 2>&1 | tee gradle-test.log
@@ -79,7 +108,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v6
         with:
-          name: MPorTtube-V5.3.6-Debug-APK
+          name: MPorTtube-V5.3.9-Debug-APK
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
@@ -88,7 +117,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: MPorTtube-V5.3.6-Build-Reports
+          name: MPorTtube-V5.3.9-Build-Reports
           path: |
             gradle-build.log
             gradle-test.log
