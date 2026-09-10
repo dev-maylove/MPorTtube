@@ -842,3 +842,71 @@ private fun loadDeviceMusic(context: Context): List<VideoEntity> {
     }
     return result
 }
+
+
+/** Android 13+ uses READ_MEDIA_VIDEO; Android 12 and below use READ_EXTERNAL_STORAGE. */
+@Composable
+fun LocalVideoScreen(onBack: () -> Unit, onOpenPlayer: () -> Unit) {
+    val context = LocalContext.current
+    var granted by remember { mutableStateOf(hasVideoPermission(context)) }
+    var videos by remember { mutableStateOf(emptyList<VideoEntity>()) }
+    val playerVm: PlayerViewModel = hiltViewModel()
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        granted = ok
+        if (ok) videos = loadDeviceVideos(context)
+    }
+    androidx.compose.runtime.LaunchedEffect(granted) { if (granted) videos = loadDeviceVideos(context) }
+    Scaffold(
+        topBar = { TopAppBar(title = { Column { Text("Local Videos"); Text("Device gallery", style = MaterialTheme.typography.labelSmall) } }, navigationIcon = { IconButton(onClick = onBack) { Text("‹", style = MaterialTheme.typography.headlineMedium) } }) },
+        bottomBar = { MiniPlayer(onOpenPlayer) }
+    ) { padding ->
+        if (!granted) {
+            Column(Modifier.fillMaxSize().padding(padding).padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("Allow video access", style = MaterialTheme.typography.headlineSmall)
+                Spacer(Modifier.height(10.dp))
+                Text("MPorTtube needs media permission to read videos already stored in your device gallery.")
+                Spacer(Modifier.height(18.dp))
+                Button(onClick = {
+                    val permission = if (android.os.Build.VERSION.SDK_INT >= 33) android.Manifest.permission.READ_MEDIA_VIDEO else android.Manifest.permission.READ_EXTERNAL_STORAGE
+                    launcher.launch(permission)
+                }) { Text("Allow Video Access") }
+            }
+        } else {
+            LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                item { Text("Videos on this device", style = MaterialTheme.typography.titleLarge) }
+                if (videos.isEmpty()) item { Text("No local videos found.") }
+                items(videos, key = { it.id }) { video ->
+                    ElevatedCard(Modifier.fillMaxWidth().clickable { playerVm.queue(videos, videos.indexOf(video)); onOpenPlayer() }) {
+                        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) { Text(video.title, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis); Text(video.source, style = MaterialTheme.typography.bodySmall) }
+                            TextButton(onClick = { playerVm.queue(videos, videos.indexOf(video)); onOpenPlayer() }) { Text("Play") }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun hasVideoPermission(context: Context): Boolean {
+    val permission = if (android.os.Build.VERSION.SDK_INT >= 33) android.Manifest.permission.READ_MEDIA_VIDEO else android.Manifest.permission.READ_EXTERNAL_STORAGE
+    return androidx.core.content.ContextCompat.checkSelfPermission(context, permission) == android.content.pm.PackageManager.PERMISSION_GRANTED
+}
+
+private fun loadDeviceVideos(context: Context): List<VideoEntity> {
+    val result = mutableListOf<VideoEntity>()
+    val collection = if (android.os.Build.VERSION.SDK_INT >= 29) android.provider.MediaStore.Video.Media.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL) else android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+    val projection = arrayOf(android.provider.MediaStore.Video.Media._ID, android.provider.MediaStore.Video.Media.TITLE, android.provider.MediaStore.Video.Media.DISPLAY_NAME)
+    context.contentResolver.query(collection, projection, null, null, android.provider.MediaStore.Video.Media.DATE_ADDED + " DESC")?.use { c ->
+        val idCol = c.getColumnIndexOrThrow(android.provider.MediaStore.Video.Media._ID)
+        val titleCol = c.getColumnIndexOrThrow(android.provider.MediaStore.Video.Media.TITLE)
+        val nameCol = c.getColumnIndexOrThrow(android.provider.MediaStore.Video.Media.DISPLAY_NAME)
+        while (c.moveToNext()) {
+            val id = c.getLong(idCol)
+            val uri = android.content.ContentUris.withAppendedId(collection, id)
+            val title = c.getString(titleCol)?.takeIf { it.isNotBlank() } ?: c.getString(nameCol) ?: "Local video"
+            result += VideoEntity(id = "video_$id", title = title, url = uri.toString(), source = "LOCAL VIDEO")
+        }
+    }
+    return result
+}

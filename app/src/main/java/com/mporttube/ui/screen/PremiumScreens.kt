@@ -142,6 +142,8 @@ fun PremiumHomeScreen(
     onQueue: () -> Unit,
     onLibrary: () -> Unit,
     onSettings: () -> Unit,
+    onOpenMusic: () -> Unit = {},
+    onOpenLocalVideo: () -> Unit = {},
     vm: HomeViewModel = hiltViewModel(),
     player: PlayerViewModel = hiltViewModel()
 ) {
@@ -245,6 +247,8 @@ fun PremiumHomeScreen(
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     AssistChip(onClick = onQueue, label = { Text("Queue") })
+                    AssistChip(onClick = onOpenMusic, label = { Text("Music") })
+                    AssistChip(onClick = onOpenLocalVideo, label = { Text("Local Video") })
                     AssistChip(onClick = onLibrary, label = { Text("Library") })
                 }
             }
