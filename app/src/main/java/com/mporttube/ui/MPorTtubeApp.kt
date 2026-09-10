@@ -88,7 +88,11 @@ fun MPorTtubeApp() {
                     openFavorites = { nav.navigate("favorites") },
                     openPlaylists = { nav.navigate("playlists") },
                     openDownloads = { nav.navigate("downloads") },
-                    openMusic = { nav.navigate("music") }
+                    openMusic = { nav.navigate("music") },
+                    openSearch = { nav.navigate("search") },
+                    openQueue = { nav.navigate("queue") },
+                    openLibrary = { nav.navigate("library") },
+                    openSettings = { nav.navigate("settings") }
                 )
             }
 

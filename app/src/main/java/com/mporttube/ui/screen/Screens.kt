@@ -80,6 +80,10 @@ fun HomeScreen(
     openPlaylists: () -> Unit,
     openDownloads: () -> Unit,
     openMusic: () -> Unit = {},
+    openSearch: () -> Unit = {},
+    openQueue: () -> Unit = {},
+    openLibrary: () -> Unit = {},
+    openSettings: () -> Unit = {},
     vm: HomeViewModel = hiltViewModel(),
     player: PlayerViewModel = hiltViewModel(),
     downloads: DownloadViewModel = hiltViewModel()
@@ -122,6 +126,8 @@ fun HomeScreen(
                 },
                 actions = {
                     TextButton(onClick = openMusic) { Text("Music") }
+                    TextButton(onClick = openSearch) { Text("Search") }
+                    TextButton(onClick = openSettings) { Text("Settings") }
                     TextButton(onClick = {
                         val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
                             type = "text/plain"
@@ -162,6 +168,17 @@ fun HomeScreen(
                     AssistChip(onClick = openFavorites, label = { Text("Favorites") })
                     AssistChip(onClick = openPlaylists, label = { Text("Playlists") })
                     AssistChip(onClick = openDownloads, label = { Text("Downloads") })
+                }
+            }
+
+            item {
+                Text("Quick access", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AssistChip(onClick = openSearch, label = { Text("Search") })
+                    AssistChip(onClick = openQueue, label = { Text("Queue") })
+                    AssistChip(onClick = openLibrary, label = { Text("Library") })
+                    AssistChip(onClick = openSettings, label = { Text("Settings") })
                 }
             }
 
